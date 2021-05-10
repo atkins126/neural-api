@@ -13,7 +13,7 @@ This project is a subproject from a bigger and older project called [CAI](https:
 You'll need [Lazarus](https://www.lazarus-ide.org/) development environment. If you have an OpenCL capable device, you'll need its OpenCL drivers.
 
 ## Will It Work with Delphi?
-This project is [Lazarus](https://www.lazarus-ide.org/) based. That said, as of release [v0.98](https://github.com/joaopauloschuler/neural-api/releases/tag/v0.98), a number of units do compile with Delphi and you can create and run neural networks with Delphi. You'll be able to compile these units with Delphi: neuralvolume, neuralnetwork, neuralab, neuralabfun, neuralbit, neuralbyteprediction, neuralcache, neuraldatasets, neuralgeneric, neuralplanbuilder and neuralfit. At this moment, Neural OpenCL and Neural Threading for Delphi are experimental. 
+This project is [Lazarus](https://www.lazarus-ide.org/) based. That said, as of release [v0.98](https://github.com/joaopauloschuler/neural-api/releases/tag/v0.98), a number of units do compile with Delphi and you can create and run neural networks with Delphi. You'll be able to compile these units with Delphi: neuralvolume, neuralnetwork, neuralab, neuralabfun, neuralbit, neuralbyteprediction, neuralcache, neuraldatasets, neuralgeneric, neuralplanbuilder, Neural OpenCL, Neural Threading and neuralfit. 
 
 ## Installation
 Clone this project, add the **neural** folder to your Lazarus unit search path and you'll be ready to go!
@@ -22,15 +22,17 @@ Clone this project, add the **neural** folder to your Lazarus unit search path a
 This is an example for image classification:
 ```
 NN := TNNet.Create();
-NN.AddLayer(TNNetInput.Create(32, 32, 3)); //32x32x3 Input Image
-NN.AddLayer(TNNetConvolutionReLU.Create({Features=}16, {FeatureSize=}5, {Padding=}0, {Stride=}1, {SuppressBias=}0));
-NN.AddLayer(TNNetMaxPool.Create({Size=}2));
-NN.AddLayer(TNNetConvolutionReLU.Create({Features=}32, {FeatureSize=}5, {Padding=}0, {Stride=}1, {SuppressBias=}0));
-NN.AddLayer(TNNetMaxPool.Create({Size=}2));
-NN.AddLayer(TNNetConvolutionReLU.Create({Features=}32, {FeatureSize=}5, {Padding=}0, {Stride=}1, {SuppressBias=}0));
-NN.AddLayer(TNNetLayerFullConnectReLU.Create({Neurons=}32));
-NN.AddLayer(TNNetFullConnectLinear.Create(NumClasses));
-NN.AddLayer(TNNetSoftMax.Create());
+NN.AddLayer([
+  TNNetInput.Create(32, 32, 3), //32x32x3 Input Image
+  TNNetConvolutionReLU.Create({Features=}16, {FeatureSize=}5, {Padding=}0, {Stride=}1, {SuppressBias=}0),
+  TNNetMaxPool.Create({Size=}2),
+  TNNetConvolutionReLU.Create({Features=}32, {FeatureSize=}5, {Padding=}0, {Stride=}1, {SuppressBias=}0),
+  TNNetMaxPool.Create({Size=}2),
+  TNNetConvolutionReLU.Create({Features=}32, {FeatureSize=}5, {Padding=}0, {Stride=}1, {SuppressBias=}0),
+  TNNetFullConnectReLU.Create({Neurons=}32),
+  TNNetFullConnectLinear.Create(NumClasses),
+  TNNetSoftMax.Create()
+]);
 
 CreateCifar10Volumes(ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes);
 
@@ -54,6 +56,7 @@ The documentation is under construction and is currently composed by:
 ### Introductory Examples
 Some recommended introductory source code examples are:
 * [Training a neural network to learn the hypotenuse function](https://github.com/joaopauloschuler/neural-api/tree/master/examples/Hypotenuse)
+* [Training a neural network to learn the hypotenuse function with FitLoading](https://github.com/joaopauloschuler/neural-api/tree/master/examples/HypotenuseFitLoading)
 * [Training a neural network to learn boolean functions AND, OR and XOR with neuralfit unit](https://github.com/joaopauloschuler/neural-api/tree/master/examples/XorAndOr)
 * [Training a neural network to learn boolean functions AND, OR and XOR without neuralfit unit](https://sourceforge.net/p/cai/svncode/HEAD/tree/trunk/lazarus/experiments/supersimple/supersimple.lpr)
 * [Simple CIFAR-10 Image Classifier](https://github.com/joaopauloschuler/neural-api/tree/master/examples/SimpleImageClassifier)  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/joaopauloschuler/neural-api/blob/master/examples/SimpleImageClassifier/SimpleImageClassifierCPU.ipynb)
@@ -190,12 +193,14 @@ This API is really big. The following list gives a general idea about this API b
 * `TNNet.AddSeparableConvReLU` (input/output: 1D, 2D or 3D). Adds a separable convolution.
 * `TNNet.AddSeparableConvLinear` (input/output: 1D, 2D or 3D). Adds a separable convolution.
 * `TNNet.AddConvOrSeparableConv` (input/output: 1D, 2D or 3D). Adds a convolution or a separable convolutions with/without ReLU and normalization.
+* `TNNet.AddGroupedConvolution` (input/output: 1D, 2D or 3D). Adds grouped convolutions. 
 
-### Fully Connected Layers
+### Fully Connected (Dense) Layers
 * `TNNetFullConnect` (input/output: 1D, 2D or 3D).
 * `TNNetFullConnectReLU` (input/output: 1D, 2D or 3D).
 * `TNNetFullConnectLinear` (input/output: 1D, 2D or 3D).
 * `TNNetFullConnectSigmoid` (input/output: 1D, 2D or 3D).
+* `TNNet.AddGroupedFullConnect`: inspired on `TNNet.AddGroupedConvolution`, adds a grouped fully connected layer.
 
 ### Locally Connected Layers
 * `TNNetLocalConnect` (input/output: 1D, 2D or 3D - feature size: 1D or 2D).
@@ -236,7 +241,8 @@ This API is really big. The following list gives a general idea about this API b
 * `TNNetIdentity` (input/output: 1D, 2D or 3D).
 * `TNNetIdentityWithoutBackprop` (input/output: 1D, 2D or 3D). Allows the forward pass to proceed but prevents backpropagation.
 * `TNNetReshape` (input/output: 1D, 2D or 3D).
-* `TNNetSplitChannels` (input: 1D, 2D or 3D / output: 1D, 2D or 3D). Splits layers/channels from the input.
+* `TNNetSplitChannels` (input: 1D, 2D or 3D / output: 1D, 2D or 3D). Splits (or copies) channels from the input. This layer allows getting a subset of the input channels.
+* `TNNetSplitChannelEvery` (input: 1D, 2D or 3D / output: 1D, 2D or 3D). Splits (or copies) channels from the input every few channels. As example, this layer allows getting  half (GetChannelEvery=2) or a third (GetChannelEvery=3) of the input channels.
 * `TNNetSum` (input/output: 1D, 2D or 3D). Sums outputs from previous layers allowing ResNet style networks.
 
 ### Layers with Activation Functions and no Trainable Parameter
@@ -279,6 +285,20 @@ This API is really big. The following list gives a general idea about this API b
 * `procedure CopyResizing(Original: TVolume; NewSizeX, NewSizeY: integer);`
 * `procedure AddGaussianNoise(pMul: TNeuralFloat);`
 * `procedure AddSaltAndPepper(pNum: integer; pSalt: integer = 2; pPepper: integer = -2);`
+
+## Adding Layers
+You can add layers one by one or you can add an array of layers in one go. Follows an example adding layers one by one:
+```
+NN.AddLayer(TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}5, {Padding=}2, {Stride=}1));
+NN.AddLayer(TNNetMaxPool.Create(2));
+```
+The next example shows how to add an array of layers that is equivalent to the above example:
+```
+NN.AddLayer([
+  TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}5, {Padding=}2, {Stride=}1),
+  TNNetMaxPool.Create(2)
+]);
+```
 
 ## Multi-path Architectures Support
 Since 2017, this API supports multi-paths architectures. You can create multi-paths with `AddLayerAfter` method. For concatenating (merging) paths, you can call either `TNNetConcat` or `TNNetDeepConcat`. Follows an example:
@@ -367,6 +387,29 @@ Source code examples:
 * [Simple Plant Leaf Disease Image Classifier for the PlantVillage Dataset](https://github.com/joaopauloschuler/neural-api/tree/master/examples/SimplePlantLeafDisease)
 * [Tiny ImageNet 200](https://github.com/joaopauloschuler/neural-api/blob/master/examples/SimpleTinyImageNet)
 
+#### Is your Dataset too Big for RAM? You should use TNeuralImageLoadingFit.
+In the case that your image classification dataset is too big to be stored in RAM, you can follow this example:
+```
+    FTrainingFileNames, FValidationFileNames, FTestFileNames: TFileNameList;
+...
+    ProportionToLoad := 1;
+    CreateFileNameListsFromImagesFromFolder(
+      FTrainingFileNames, FValidationFileNames, FTestFileNames,
+      {FolderName=}'places_folder/train', {pImageSubFolder=}'',
+      {TrainingProp=}0.9*ProportionToLoad,
+      {ValidationProp=}0.05*ProportionToLoad,
+      {TestProp=}0.05*ProportionToLoad
+    );
+```
+Then, you can call a fitting method made specific for this:
+```
+NeuralFit := TNeuralImageLoadingFit.Create;
+...
+NeuralFit.FitLoading({NeuralNetworkModel}NN, {ImageSizeX}256, {ImageSizeY}256, FTrainingFileNames, FValidationFileNames, FTestFileNames, {BatchSize}256, {Epochs}100);
+```
+`TNeuralImageLoadingFit.FitLoading` has been tested with [Places365-Standard Small images 256x256 with easy directory structure](http://places2.csail.mit.edu/download.html).
+You can follow this example:
+* [Simple Plant Leaf Disease Image Classifier with Few RAM](https://github.com/joaopauloschuler/neural-api/blob/master/examples/SimplePlantLeafDisease/SimplePlantLeafDiseaseLoadingAPI.pas)
 ### Loading and Saving Images with Volumes
 When loading an image from a file, the easiest and fastest method is calling `LoadImageFromFileIntoVolume(ImageFileName:string; V:TNNetVolume)`. When loading from an **TFPMemoryImage**, you can load with `LoadImageIntoVolume(M: TFPMemoryImage; Vol:TNNetVolume)`. For saving an image, the fastest method is `SaveImageFromVolumeIntoFile(V: TNNetVolume; ImageFileName: string)`.
 
@@ -392,14 +435,17 @@ Once you have a trained neural network, you can use an advanced classification p
 procedure ClassifyImage(pNN: TNNet; pImgInput, pOutput: TNNetVolume);
 ```
 In the case that you would like to look into `TNeuralImageFit` in more detail, the [Simple CIFAR-10 Image Classifier](https://github.com/joaopauloschuler/neural-api/tree/master/examples/SimpleImageClassifier) example is a good starting point.
-### Training with Volume Pairs
+
+### Training with Volume Pair Lists - TNeuralFit
 In the case that your training, validation and testing data can be defined as volume pairs from input volume to output volume, the easiest way to train your neural network will be calling `TNeuralFit`. This class has the following fitting method:
 ```
 procedure Fit(pNN: TNNet;
   pTrainingVolumes, pValidationVolumes, pTestVolumes: TNNetVolumePairList;
   pBatchSize, Epochs: integer);
 ```
-The above implementation has a limitation: your dataset needs to be placed into RAM. In the case that your dataset is too large for RAM, you can call `TNeuralDataLoadingFit`:
+Both [AND, OR and XOR with neuralfit unit](https://github.com/joaopauloschuler/neural-api/tree/master/examples/XorAndOr) and [hypotenuse function](https://github.com/joaopauloschuler/neural-api/tree/master/examples/Hypotenuse) examples load volume pair lists for training.
+### Training with Volume Pairs - TNeuralDataLoadingFit
+The `TNeuralFit` implementation has a limitation: your dataset needs to be placed into RAM. In the case that your dataset is too large for RAM, you can call `TNeuralDataLoadingFit`:
 ```
 TNNetGetPairFn = function(Idx: integer; ThreadId: integer): TNNetVolumePair of object;
 TNNetGet2VolumesProc = procedure(Idx: integer; ThreadId: integer; pInput, pOutput: TNNetVolume) of object;
@@ -413,7 +459,7 @@ TNeuralDataLoadingFit = class(TNeuralFitBase)
       TrainingCnt, ValidationCnt, TestCnt, pBatchSize, Epochs: integer;
       pGetTrainingProc, pGetValidationProc, pGetTestProc: TNNetGet2VolumesProc); overload;
 ```
-The [Training a neural network to learn boolean functions AND, OR and XOR with neuralfit unit](https://github.com/joaopauloschuler/neural-api/tree/master/examples/XorAndOr) example uses volume pair list for training as its training data is very small. The [Super Resolution](https://github.com/joaopauloschuler/neural-api/tree/master/examples/SuperResolution) example uses `TNeuralDataLoadingFit` so it creates training pairs on the fly.
+ The [Hypotenuse with FitLoading](https://github.com/joaopauloschuler/neural-api/tree/master/examples/HypotenuseFitLoading) example uses `TNeuralDataLoadingFit` so it creates training pairs on the fly.
 ### TNeuralFitBase
 `TNeuralImageFit` and `TNeuralDataLoadingFit` both descend from `TNeuralFitBase`. From `TNeuralFitBase`, you can define training properties:
 ```
@@ -471,6 +517,43 @@ NeuralFit := TNeuralImageFit.Create;
 ...
 NeuralFit.Verbose := false;
 NeuralFit.HideMessages();
+```
+
+## Parallel Computing - The neuralthread.pas
+This API has easy to use, lightweight and platform independent parallel processing API methods.
+
+As an example, assuming that you need to run a procedure 10 times in parallel, you can create 10 thread workers as follows:
+```
+FProcs := TNeuralThreadList.Create( 10 );
+```
+
+As an example, this is the procedure that we intend to run in parallel:
+```
+procedure MyClassName.RunNNThread(index, threadnum: integer);
+begin
+  WriteLn('This is thread ',index,' out of ',threadnum,' threads.');
+end; 
+```
+Then, to run the procedure RunNNThread passed as parameter 10 times in parallel, do this:
+```
+FProcs.StartProc({$IFDEF FPC}@RunNNThread{$ELSE}RunNNThread{$ENDIF});
+```
+You can control the blocking mode (waiting threads to finish
+before the program continues) as per declaration:
+```
+procedure StartProc(pProc: TNeuralProc; pBlock: boolean = true);
+```
+
+Or, if you prefer, you can specifically say when to wait for threads to finish
+as per this example:
+```
+FProcs.StartProc({$IFDEF FPC}@RunNNThread{$ELSE}RunNNThread{$ENDIF}, false);
+// insert your code here
+FProcs.WaitForProc(); // waits until all threads are finished.
+```
+When you are done, you should call:
+```
+FProcs.Free; 
 ```
 
 ## Paid Support

@@ -27,6 +27,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 // Enable this flag if you intend to use OpenCL
 //{$Define OpenCL}
 
+{$DEFINE HASTHREADS}
+
 {$IFDEF FPC}
   {$COPERATORS ON}
   {$mode objfpc}
@@ -34,6 +36,24 @@ with this program; if not, write to the Free Software Foundation, Inc.,
   {$MACRO ON}
   {$LONGSTRINGS ON}
   {$CODEPAGE UTF8}
+  {$IFDEF CPUARM}
+    {$DEFINE NOTAVX}
+  {$ENDIF}
+  {$IFDEF CPUAARCH64}
+    {$DEFINE NOTAVX}
+  {$ENDIF}
+  {$IFDEF CPUPOWERPC}
+    {$DEFINE NOTAVX}
+  {$ENDIF}
+  {$IFDEF CPUM68K}
+    {$DEFINE NOTAVX}
+  {$ENDIF}
+  {$IFDEF NOTAVX}
+    {$UNDEF AVX}
+    {$UNDEF AVX2}
+    {$UNDEF AVX512}
+    {$UNDEF AVXANY}
+  {$ENDIF}
 {$ELSE}
   // AVX code is supported only under FPC
   {$UNDEF AVX}

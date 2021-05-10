@@ -1,4 +1,4 @@
-program SimpleImageClassifier;
+program SimpleImageClassifierGroupedConv;
 (*
  Coded by Joao Paulo Schwarz Schuler.
  https://github.com/joaopauloschuler/neural-api
@@ -32,18 +32,23 @@ type
     NN.AddLayer([
       TNNetInput.Create(32, 32, 3),
       TNNetConvolutionLinear.Create({Features=}64, {FeatureSize=}5, {Padding=}2, {Stride=}1, {SuppressBias=}1),
-      TNNetMaxPool.Create(4),
-      TNNetMovingStdNormalization.Create(),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1),
-      TNNetDropout.Create(0.5),
+      TNNetMaxPool.Create(4)
+    ]);
+    NN.AddGroupedConvolution(TNNetConvolutionReLU,
+      {Groups=}8, {Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1);
+    NN.AddGroupedConvolution(TNNetConvolutionReLU,
+      {Groups=}4, {Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1);
+    NN.AddGroupedConvolution(TNNetConvolutionReLU,
+      {Groups=}8, {Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1);
+    NN.AddGroupedConvolution(TNNetConvolutionReLU,
+      {Groups=}4, {Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1, {SuppressBias=}1);
+    NN.AddLayer([
       TNNetMaxPool.Create(2),
       TNNetFullConnectLinear.Create(10),
       TNNetSoftMax.Create()
     ]);
     NN.DebugStructure();
+
     CreateCifar10Volumes(ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes);
 
     NeuralFit := TNeuralImageFit.Create;
@@ -53,6 +58,7 @@ type
     NeuralFit.StaircaseEpochs := 10;
     NeuralFit.Inertia := 0.9;
     NeuralFit.L2Decay := 0.00001;
+    //NeuralFit.MaxThreadNum := 1;
     NeuralFit.Fit(NN, ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes, {NumClasses=}10, {batchsize=}64, {epochs=}50);
     NeuralFit.Free;
 

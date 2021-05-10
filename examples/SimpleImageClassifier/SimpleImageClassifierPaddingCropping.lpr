@@ -1,4 +1,4 @@
-program SimpleImageClassifier;
+program SimpleImageClassifierPaddingCropping;
 (*
  Coded by Joao Paulo Schwarz Schuler.
  https://github.com/joaopauloschuler/neural-api
@@ -15,6 +15,11 @@ type
   protected
     procedure DoRun; override;
   end;
+
+const
+  // Padding and cropping constants.
+  csPadding = 4;
+  csCropSize = csPadding * 2;
 
   procedure TTestCNNAlgo.DoRun;
   var
@@ -46,13 +51,36 @@ type
     NN.DebugStructure();
     CreateCifar10Volumes(ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes);
 
+    // Add padding to dataset
+    WriteLn
+    (
+      'Original image size: ',
+      ImgTrainingVolumes[0].SizeX,',',
+      ImgTrainingVolumes[0].SizeY,' px.'
+    );
+    ImgTrainingVolumes.AddPadding(csPadding);
+    ImgValidationVolumes.AddPadding(csPadding);
+    ImgTestVolumes.AddPadding(csPadding);
+    WriteLn
+    (
+      'New image size after padding: ',
+      ImgTrainingVolumes[0].SizeX,',',
+      ImgTrainingVolumes[0].SizeY,' px.'
+    );
+
     NeuralFit := TNeuralImageFit.Create;
-    NeuralFit.FileNameBase := 'SimpleImageClassifier-'+IntToStr(GetProcessId());
+
+    // Enable cropping while fitting.
+    NeuralFit.HasImgCrop := true;
+    NeuralFit.MaxCropSize := csCropSize;
+
+    NeuralFit.FileNameBase := 'SimpleImageClassifierPaddingCropping-'+IntToStr(GetProcessId());
     NeuralFit.InitialLearningRate := 0.001;
     NeuralFit.LearningRateDecay := 0.01;
     NeuralFit.StaircaseEpochs := 10;
     NeuralFit.Inertia := 0.9;
     NeuralFit.L2Decay := 0.00001;
+
     NeuralFit.Fit(NN, ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes, {NumClasses=}10, {batchsize=}64, {epochs=}50);
     NeuralFit.Free;
 
