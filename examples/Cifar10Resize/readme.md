@@ -1,5 +1,5 @@
 # CIFAR-10 Resized
-This folder contains a program that resizes CIFAR-10 images to 64x64, 128x128 and 256x256 pixels. 
+This folder contains a program that resizes CIFAR-10 and CIFAR-100 images to 64x64 and 128x128 pixels. 
 
 ## Original Work
 The [CIFAR-10 Dataset](https://www.cs.toronto.edu/~kriz/cifar.html) is a fantastic contribution to computer science made by the original authors.
@@ -19,3 +19,4 @@ You may look at this [API example](https://github.com/joaopauloschuler/neural-ap
 You can download resized images from:
 * https://www.kaggle.com/joaopauloschuler/cifar10-64x64-resized-via-cai-super-resolution
 * https://www.kaggle.com/joaopauloschuler/cifar10-128x128-resized-via-cai-super-resolution
+* https://www.kaggle.com/joaopauloschuler/cifar100-128x128-resized-via-cai-super-resolution
