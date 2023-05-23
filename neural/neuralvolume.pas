@@ -552,6 +552,12 @@ type
   function RectifiedLinearUnit(x: TNeuralFloat): TNeuralFloat;
   function RectifiedLinearUnitDerivative(x: TNeuralFloat): TNeuralFloat;
 
+  function Swish(x: TNeuralFloat): TNeuralFloat;
+  function SwishDerivative(x: TNeuralFloat): TNeuralFloat;
+
+  function HardSwish(x: TNeuralFloat): TNeuralFloat;
+  function HardSwishDerivative(x: TNeuralFloat): TNeuralFloat;
+
   function RectifiedLinearUnitLeaky(x: TNeuralFloat): TNeuralFloat;
   function RectifiedLinearUnitLeakyDerivative(x: TNeuralFloat): TNeuralFloat;
 
@@ -1203,7 +1209,7 @@ begin
   Result := FloatToStr(V,LocalFormatSettings);
 end;
 
-function NeuralStrToFloat(V: string): TNeuralFloat;
+function NeuralStrToFloat(V: String): TNeuralFloat;
 var
   LocalFormatSettings: TFormatSettings;
 begin
@@ -1498,6 +1504,53 @@ begin
   if x>0
     then Result := 1
     else Result := 0;
+end;
+
+function Swish(x: TNeuralFloat): TNeuralFloat;
+begin
+  Result := x / ( 1 + Exp(-x) );
+end;
+
+function SwishDerivative(x: TNeuralFloat): TNeuralFloat;
+var
+  SigmoidValue, OutputValue: TNeuralFloat;
+begin
+  SigmoidValue := 1 / ( 1 + Exp(-x) ); {Swish(x)}
+  OutputValue := x * SigmoidValue;
+  Result :=  OutputValue + SigmoidValue * (1-OutputValue);
+end;
+
+// https://paperswithcode.com/method/hard-swish
+function HardSwish(x: TNeuralFloat): TNeuralFloat;
+begin
+  if x > 3 then
+  begin
+    Result := x;
+  end
+  else if x < -3 then
+  begin
+    Result := 0;
+  end
+  else
+  begin
+    Result := x*(x + 3)/6;
+  end;
+end;
+
+function HardSwishDerivative(x: TNeuralFloat): TNeuralFloat;
+begin
+  if x<-3 then
+  begin
+    Result := 0;
+  end
+  else if x>3 then
+  begin
+    Result := 1;
+  end
+  else
+  begin
+    Result := 0.3333*x + 0.5;
+  end;
 end;
 
 constructor TNNetVolumePair.Create();
@@ -5987,17 +6040,26 @@ var
   CntY: integer;
   SizeXDepth: integer;
   PtrA, PtrB: Pointer;
+  MaxLenY: integer;
 begin
   if Self.Depth = Original.Depth then
   begin
     SizeXDepth := LenX * Self.Depth;
-    for CntY := 0 to LenY - 1 do
+    MaxLenY := LenY - 1;
+    for CntY := 0 to MaxLenY do
     begin
       PtrA := Self.GetRawPtr(DestX, DestY+CntY);
       PtrB := Original.GetRawPtr(OriginX, OriginY+CntY);
       Add(PtrA, PtrB, SizeXDepth);
     end;
-  end;
+  end
+  {$IFDEF Debug}
+  else
+  begin
+    WriteLn('Error at TNNetVolume.AddArea: depth size doesn''t match. ',
+      Self.Depth, ' ',Original.Depth);
+  end
+  {$ENDIF};
 end;
 
 function TNNetVolume.HasAVX: boolean;
