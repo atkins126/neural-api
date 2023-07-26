@@ -524,6 +524,44 @@ type
   TStringStringList = class (specialize TStringsObj<TStringList>);
   TStringVolumeList = class (specialize TStringsObj<TNNetVolume>);
   TStringStringListVolume = class (specialize TStringsObj<TStringVolumeList>);
+
+  {$ELSE}
+  TStringsObj = class(TNNetStringList)
+    private
+      function GetList(Index: Integer): TObject;
+      function CreateObject: TObject; virtual; abstract;
+    public
+      constructor Create;
+      function AddObject(const S: string; AObject: TObject): Integer; override;
+      procedure FixObjects();
+
+      procedure AddStringObj(const S: string);
+      property List[Index: Integer]: TObject read GetList;
+  end;
+
+  TStringStringList = class(TStringsObj)
+    private
+      function GetList(Index: Integer): TStringList;
+      function CreateObject: TObject; override;
+    public
+      property List[Index: Integer]: TStringList read GetList;
+  end;
+
+  TStringVolumeList = class(TStringsObj)
+    private
+      function GetList(Index: Integer): TNNetVolume;
+      function CreateObject: TObject;  override;
+    public
+      property List[Index: Integer]: TNNetVolume read GetList;
+    end;
+
+  TStringStringListVolume = class(TStringsObj)
+    private
+      function GetList(Index: Integer): TStringVolumeList;
+      function CreateObject: TObject;  override;
+    public
+      property List[Index: Integer]: TStringVolumeList read GetList;
+    end;
   {$ENDIF}
 
   { TNNetDictionary }
@@ -1679,6 +1717,94 @@ procedure TStringsObj.AddStringObj(const S: string);
 begin
   Self.AddObject(S, TObj.Create);
 end;
+{$ELSE}
+function TStringsObj.GetList(Index: Integer): TObject;
+begin
+  Result := Self.Objects[Index];
+end;
+
+constructor TStringsObj.Create;
+begin
+  inherited Create;
+  Self.OwnsObjects := true;
+  Self.Sorted := true;
+end;
+
+function TStringsObj.AddObject(const S: string; AObject: TObject): Integer;
+begin
+  if not Assigned(AObject) then
+  begin
+    AObject := CreateObject;
+  end;
+
+  if AObject is TStringList then
+  begin
+    TStringList(AObject).Sorted := true;
+  end;
+
+  Result := inherited AddObject(S, AObject);
+end;
+
+procedure TStringsObj.FixObjects();
+var
+  ElementId: integer;
+begin
+  if Count > 0 then
+  begin
+    for ElementId := 0 to Count - 1 do
+    begin
+      if not Assigned(Self.List[ElementId]) then
+      begin
+        Self.Objects[ElementId] := CreateObject;
+      end;
+
+      if Self.Objects[ElementId] is TStringList then
+      begin
+        TStringList(Self.Objects[ElementId]).Sorted := true;
+      end;
+    end;
+  end;
+end;
+
+procedure TStringsObj.AddStringObj(const S: string);
+begin
+  Self.AddObject(S, CreateObject);
+end;
+
+{ TStringStringList }
+function TStringStringList.CreateObject: TObject;
+begin
+  Result := TStringList.Create();
+end;
+
+function TStringStringList.GetList(Index: Integer): TStringList;
+begin
+  Result := TStringList(inherited GetList(Index) );
+end;
+
+{ TStringVolumeList }
+function TStringVolumeList.CreateObject: TObject;
+begin
+  Result := TNNetVolume.Create();
+end;
+
+function TStringVolumeList.GetList(Index: Integer): TNNetVolume;
+begin
+  Result := TNNetVolume(inherited GetList(Index) );
+end;
+
+{ TStringStringListVolume }
+function TStringStringListVolume.CreateObject: TObject;
+begin
+  Result := TStringVolumeList.Create;
+end;
+
+function TStringStringListVolume.GetList(Index: Integer): TStringVolumeList;
+begin
+  Result := TStringVolumeList(inherited GetList(Index) );
+end;
+
+
 {$ENDIF}
 
 { TStringListInt }
