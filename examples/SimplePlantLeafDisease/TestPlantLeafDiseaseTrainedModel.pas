@@ -1,8 +1,8 @@
-///This file has an implementation to classify
-//plant leaf diseases. You can get the dataset at
+///This file has an implementation to test a trained model for
+//plant leaf diseases image classification. You can get the dataset at
 //https://data.mendeley.com/datasets/tywbtsjrjv/1/files/d5652a28-c1d8-4b76-97f3-72fb80f94efc/Plant_leaf_diseases_dataset_without_augmentation.zip?dl=1 .
 //Folders with plant diseases will need to be stored inside of a folder named "plant".
-program SimplePlantLeafDisease;
+program TestPlantLeafDiseaseTrainedModel;
 (*
  Coded by Joao Paulo Schwarz Schuler.
  https://github.com/joaopauloschuler/neural-api
@@ -20,34 +20,42 @@ type
     procedure DoRun; override;
   end;
 
+  procedure TestVolumes(NN: TNNet; ImgTestVolumes: TNNetVolumeList; pLabel:string);
+  var
+    NeuralFit: TNeuralImageFit;
+    imgCnt: integer;
+    vOutput: TNNetVolume;
+    hitsCnt: integer;
+  begin
+    NeuralFit := TNeuralImageFit.Create;
+    vOutput := TNNetVolume.Create(39); // 39 classes of images
+    hitsCnt := 0;
+    for imgCnt := 0 to ImgTestVolumes.Count - 1 do
+    begin
+      vOutput.Fill(0);
+      NeuralFit.ClassifyImage(NN, ImgTestVolumes[imgCnt], vOutput);
+      // is the actual class the same as the predicted class?
+      if (ImgTestVolumes[imgCnt].Tag = vOutput.GetClass()) then inc(hitsCnt);
+    end;
+    WriteLn(pLabel, ' - Correct Classifications: ', hitsCnt);
+    WriteLn(pLabel, ' - Tested images: ', ImgTestVolumes.Count);
+    WriteLn(pLabel, ' - Precision: ', ((hitsCnt*100)/ImgTestVolumes.Count):6:3,'%');
+    vOutput.Free;
+    NeuralFit.Free;
+  end;
+
   procedure TTestCNNAlgo.DoRun;
   var
     NN: TNNet;
-    NeuralFit: TNeuralImageFit;
     ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes: TNNetVolumeList;
     ProportionToLoad: Single;
   begin
-    WriteLn('Creating Neural Network...');
-    NN := TNNet.Create();
-    NN.AddLayer([
-      TNNetInput.Create(64, 64, 3),
-      TNNetConvolutionLinear.Create({Features=}64, {FeatureSize=}5, {Padding=}4, {Stride=}1),
-      TNNetMaxPool.Create(2),
-      TNNetMovingStdNormalization.Create(),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1),
-      TNNetMaxPool.Create(2),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}1),
-      TNNetConvolutionReLU.Create({Features=}64, {FeatureSize=}3, {Padding=}1, {Stride=}2),
-      TNNetDropout.Create(0.5),
-      TNNetMaxPool.Create(2),
-      TNNetFullConnectLinear.Create(39),
-      TNNetSoftMax.Create({SkipBackpropDerivative=}1)
-    ]);
+    WriteLn('Loading Neural Network...');
+    NN := TNNet.Create;
+    NN.LoadFromFile('SimplePlantLeafDisease-20230720.nn');
     NN.DebugStructure();
     // change ProportionToLoad to a smaller number if you don't have available 16GB of RAM.
-    ProportionToLoad := 1;
+    ProportionToLoad := 0.1;
     WriteLn('Loading ', Round(ProportionToLoad*100), '% of the Plant leave disease dataset into memory.');
     CreateVolumesFromImagesFromFolder
     (
@@ -67,16 +75,11 @@ type
       ' Test Images:', ImgTestVolumes.Count
     );
 
-    NeuralFit := TNeuralImageFit.Create;
-    NeuralFit.FileNameBase := 'SimplePlantLeafDisease';
-    NeuralFit.InitialLearningRate := 0.001;
-    NeuralFit.LearningRateDecay := 0.01;
-    NeuralFit.StaircaseEpochs := 10;
-    NeuralFit.Inertia := 0.9;
-    NeuralFit.L2Decay := 0.00001;
-    //NeuralFit.MaxThreadNum := 8;
-    NeuralFit.Fit(NN, ImgTrainingVolumes, ImgValidationVolumes, ImgTestVolumes, {NumClasses=}39, {batchsize=}64, {epochs=}50);
-    NeuralFit.Free;
+    TestVolumes(NN, ImgTrainingVolumes, 'Training Images');
+    TestVolumes(NN, ImgValidationVolumes, 'Validation Images');
+    TestVolumes(NN, ImgTestVolumes, 'Test Images');
+    WriteLn('Press ENTER to quit.');
+    ReadLn();
 
     NN.Free;
     ImgTestVolumes.Free;

@@ -187,7 +187,14 @@ type
   {$ENDIF}
 
   // Loads an image from a file and stores it into a Volume.
-  function LoadImageFromFileIntoVolume(ImageFileName:string; V:TNNetVolume):boolean;
+  function LoadImageFromFileIntoVolume(ImageFileName:string; V:TNNetVolume):boolean; overload;
+
+  // Loads an image from a file and stores it into a Volume resizing to
+  // SizeX, SizeY and optionally encoding as neuronal input if has a
+  // color encoding such as csEncodeRGB.
+  function LoadImageFromFileIntoVolume(
+    ImageFileName:string; V:TNNetVolume; SizeX, SizeY: integer;
+    EncodeNeuronalInput: integer = -1):boolean; overload;
 
 // Writes the header of a confusion matrix into a CSV file
 procedure ConfusionWriteCSVHeader(var CSVConfusion: TextFile; Labels: array of string);
@@ -270,12 +277,64 @@ procedure TestBatch
 // This function translates the original CIFAR10 labels to Animal/Machine labels.
 procedure TranslateCifar10VolumesToMachineAnimal(VolumeList: TNNetVolumeList);
 
+{
+  RandomSubstring:
+  This NLP function takes a string as input and returns a substring that starts
+  immediately after a randomly selected space character within the input string.
+  If there are no spaces in the input string, the entire string is returned as is.
+  The function is useful for obtaining a random piece of text from a given string,
+  which can be applied in various scenarios that require text randomization.
+
+  Space positions are tracked using a TIntegerList. The Copy function is used
+  to extract the substring from the randomly selected space position to the end
+  of the input string.
+}
+function RandomSubstring(const InputString: string): string;
+
+{
+  RemoveRandomChars:
+  This function takes a string and an integer count as input. It removes Count
+  number of characters at random positions from the given string Str. The length
+  of the string is recalculated in each iteration to account for the reduction in
+  the string's length after each character removal.
+}
+function RemoveRandomChars(const Str: string; Count: integer): string;
+
+
+// This function randomly removes one word from the input string.
+function RemoveRandomWord(const Str: string): string;
+
+type TNNetAAInteger = array of array of integer;
+
+procedure FilterCSVWithNumbersUpToMax(inputFile,outputFile: string;
+  MaxInteger: integer; MaxRows: integer = 0);
+
+procedure LoadIntegersInCSV(filename: string;
+  var aTokens: TNNetAAInteger; MaxRows: integer = 0);
+
 {$IFNDEF FPC}
 function SwapEndian(I:integer):integer;
 procedure FindAllDirectories(AList: TStrings; const SearchPath: String;
   SearchSubDirs: Boolean = true; PathSeparator: char = ';'); overload;
 function DirectorySeparator: string;
 {$ENDIF}
+
+// Simple character based NLP function for building a string from characters.
+function GenerateStringFromChars(NN: TNNet; InputString: string; oSampler: TNNetSamplerBase = nil): string; overload;
+
+// Takes a neural network (NN) and an input string, and returns the predicted class as an integer.
+function GetClassFromChars(NN: TNNet; InputString: string): integer;
+
+// Simple token based NLP function for building a string from an array of tokens.
+function GenerateStringFromTokens(NN: TNNet; Dict:TStringListInt; InputString: string; oSampler: TNNetSamplerBase = nil): string;
+
+function GenerateStringFromCasualNN(NN: TNNet; Dict:TStringListInt;
+  InputString: string; oSampler: TNNetSamplerBase = nil;
+  EncodingMethod: integer = 0; EncodingMethod2: integer = 0): string;
+
+// Simple function for debugging an NLP NN predicting the next token.
+procedure DebugNLPOnPos(NN: TNNet; Dict: TStringListInt; var Dataset: TNNetAAInteger; Pos, Samples: integer);
+
 
 implementation
 
@@ -340,6 +399,190 @@ begin
   Result := TPath.DirectorySeparatorChar;
 end;
 {$ENDIF}
+
+function GenerateStringFromChars(NN: TNNet; InputString: string;
+  oSampler: TNNetSamplerBase): string;
+var
+  InputVolume, OutputVolume: TNNetVolume;
+  NextTokenInt: integer;
+  NextTokenChar: char;
+  AB: array [0..0] of byte;
+begin
+  InputVolume := TNNetVolume.Create(NN.GetFirstLayer.Output);
+  OutputVolume := TNNetVolume.Create(NN.GetLastLayer().Output);
+  repeat
+    InputVolume.OneHotEncodingReversed(InputString);
+    NN.Compute(InputVolume, OutputVolume);
+    if (OutputVolume.Size = 8) then
+    begin
+      OutputVolume.ReadAsBits(AB, 0.5);
+      NextTokenInt := AB[0];
+    end
+    else
+    begin
+      if Assigned(oSampler)
+      then NextTokenInt := oSampler.GetToken(OutputVolume)
+      else NextTokenInt := OutputVolume.GetClass();
+    end;
+    NextTokenChar := Char(NextTokenInt);
+    if NextTokenInt > 1 then InputString := InputString + NextTokenChar;
+  until (NextTokenInt < 2) or (Length(InputString)>=InputVolume.SizeX);
+  Result := InputString;
+  InputVolume.Free;
+  OutputVolume.Free;
+end;
+
+// Takes a neural network (NN) and an input string,
+// and returns the predicted class as an integer.
+function GetClassFromChars(NN: TNNet; InputString: string): integer;
+var
+  InputVolume: TNNetVolume; // Declare a variable for the input volume.
+begin
+  // Create a new TNNetVolume based on the output size of the first layer of the neural network.
+  InputVolume := TNNetVolume.Create(NN.GetFirstLayer.Output);
+
+  // Convert the input string into a one-hot encoded volume, which is the format
+  // expected by the neural network for processing.
+  InputVolume.OneHotEncodingReversed(InputString);
+
+  // Run the forward pass of the neural network with the one-hot encoded input.
+  NN.Compute(InputVolume);
+
+  // After the network has computed the output, retrieve the class with the highest
+  // probability from the last layer's output.
+  Result := NN.GetLastLayer().Output.GetClass();
+
+  // Release the memory allocated for the input volume to prevent memory leaks.
+  InputVolume.Free;
+end;
+
+function GenerateStringFromTokens(NN: TNNet; Dict: TStringListInt;
+  InputString: string; oSampler: TNNetSamplerBase): string;
+var
+  InputVolume, OutputVolume: TNNetVolume;
+  NextTokenInt: integer;
+  NextTokenStr: string;
+  Tokens: TNeuralIntegerArray;
+  TokenCnt: integer;
+begin
+  InputVolume := TNNetVolume.Create(NN.GetFirstLayer.Output);
+  OutputVolume := TNNetVolume.Create(NN.GetLastLayer().Output);
+  Result := InputString;
+  Dict.StringToIntegerArray(InputString, Tokens);
+  TokenCnt := Length(Tokens);
+  repeat
+    InputVolume.CopyReversedNoChecksIntArr(Tokens);
+    NN.Compute(InputVolume, OutputVolume);
+    if Assigned(oSampler)
+    then NextTokenInt := oSampler.GetToken(OutputVolume)
+    else NextTokenInt := OutputVolume.GetClass();
+    if NextTokenInt < Dict.Count then
+    begin
+      NextTokenStr := Dict.IntegerToWord(NextTokenInt);
+      Result := Result + ' ' + NextTokenStr;
+    end;
+    TokenCnt := TokenCnt + 1;
+    SetLength(Tokens, TokenCnt);
+    Tokens[TokenCnt - 1] := NextTokenInt;
+  until (NextTokenInt < 2) or (TokenCnt>=InputVolume.SizeX);
+  SetLength(Tokens, 0);
+  InputVolume.Free;
+  OutputVolume.Free;
+end;
+
+function GenerateStringFromCasualNN(NN: TNNet; Dict: TStringListInt;
+  InputString: string; oSampler: TNNetSamplerBase = nil;
+  EncodingMethod: integer = 0; EncodingMethod2: integer = 0): string;
+var
+  InputVolume, OutputVolume: TNNetVolume;
+  NextTokenInt: integer;
+  NextTokenStr: string;
+  Tokens: TNeuralIntegerArray;
+  TokenCnt: integer;
+begin
+  InputVolume := TNNetVolume.Create(NN.GetFirstLayer.Output);
+  OutputVolume := TNNetVolume.Create(NN.GetLastLayer().Output);
+  Result := InputString;
+  Dict.StringToIntegerArray(InputString, Tokens);
+  TokenCnt := Length(Tokens);
+  repeat
+    if EncodingMethod = 0 then InputVolume.CopyNoChecksIntArr(Tokens)
+    else if EncodingMethod = 1 then InputVolume.OneHotEncoding(Tokens)
+    else if EncodingMethod = 2 then InputVolume.GroupedOneHotEncoding(Tokens, EncodingMethod2);
+
+    NN.Compute(InputVolume, OutputVolume);
+    //TODO: add sampler suppport here.
+    NextTokenInt := OutputVolume.GetClassOnPixel(TokenCnt - 1, 0);
+    if NextTokenInt < Dict.Count then
+    begin
+      NextTokenStr := Dict.IntegerToWord(NextTokenInt);
+      Result := Result + ' ' + NextTokenStr;
+    end;
+    TokenCnt := TokenCnt + 1;
+    SetLength(Tokens, TokenCnt);
+    Tokens[TokenCnt - 1] := NextTokenInt;
+  until (NextTokenInt < 2) or (TokenCnt>=InputVolume.SizeX);
+  SetLength(Tokens, 0);
+  InputVolume.Free;
+  OutputVolume.Free;
+end;
+
+procedure DebugNLPOnPos(NN: TNNet; Dict: TStringListInt; var Dataset: TNNetAAInteger; Pos, Samples: integer);
+var
+  SampleId: integer;
+  SampleLen: integer;
+  SampleCutPosition: integer;
+  ExpectedTokenInt: integer;
+  AIntegerArray: TNeuralIntegerArray;
+  pInput, pOutput: TNNetVolume;
+  CntHit, CntMiss: integer;
+  InputString: string;
+begin
+  pInput := TNNetVolume.Create();
+  pOutput := TNNetVolume.Create();
+  CntHit := 0;
+  CntMiss := 0;
+  // Make sure that expected input and output have the proper sizes.
+  if NN.GetFirstLayer().Output.Size <> pInput.Size then pInput.ReSize(NN.GetFirstLayer().Output);
+  if NN.GetLastLayer().Output.Size <> pOutput.Size then pOutput.ReSize(NN.GetLastLayer().Output);
+  for SampleId := 0 to Samples -1 do
+  begin
+    // Get the input sample
+    SampleLen := Min(Length(Dataset[SampleId]), pInput.SizeX);
+    SampleCutPosition := Min(SampleLen-1, Pos);
+    // The expected token is the next character in the string
+    ExpectedTokenInt := Dataset[SampleId][SampleCutPosition];
+    // Encode the input and output volumes
+    {$IFDEF FPC}
+    AIntegerArray := Copy(Dataset[SampleId], 0, SampleCutPosition);
+    {$ELSE}
+    // This portion of code was coded by https://chatgpt.com/g/g-bqMxEDpIg-neural-api-free-pascal-developer
+    SetLength(AIntegerArray, SampleCutPosition);
+    if SampleCutPosition > 0 then
+    Move(Dataset[SampleId][0], AIntegerArray[0], SampleCutPosition * SizeOf(Integer));
+    {$ENDIF}
+    pInput.Fill(0);
+    pInput.CopyReversedNoChecksIntArr( AIntegerArray );
+    NN.Compute(pInput, pOutput);
+    if pOutput.GetClass() = ExpectedTokenInt then
+    begin
+      Inc(CntHit);
+      if random(100) = 0 then
+      begin
+        InputString := Dict.IntegerArrayToString(AIntegerArray);
+        WriteLn(InputString,'-->',Dict.IntegerToWord(ExpectedTokenInt));
+        WriteLn(GenerateStringFromTokens(NN, Dict, InputString, nil),'.');
+      end;
+    end
+    else
+    begin
+      Inc(CntMiss);
+    end;
+  end;
+  WriteLn('Pos: ',Pos,' Hit:',CntHit);
+  pOutput.Free;
+  pInput.Free;
+end;
 
 procedure CreateVolumesFromImagesFromFolder(out ImgTrainingVolumes, ImgValidationVolumes,
   ImgTestVolumes: TNNetVolumeList;
@@ -548,7 +791,7 @@ begin
     {$IFDEF Debug}
     Self.LoadImages_NTL(0,1);
     {$ELSE}
-    NTL.StartProc(@Self.LoadImages_NTL);
+    NTL.StartProc({$IFDEF FPC}@{$ENDIF}Self.LoadImages_NTL);
     {$ENDIF}
   end;
   NTL.Free;
@@ -1312,6 +1555,34 @@ begin
   end;
 end;
 
+function LoadImageFromFileIntoVolume(ImageFileName:string; V:TNNetVolume;
+  SizeX, SizeY: integer;
+  EncodeNeuronalInput: integer = -1
+  ): boolean;
+var
+  VAux: TNNetVolume;
+begin
+  if LoadImageFromFileIntoVolume(ImageFileName, V) then
+  begin
+    if (V.SizeX<>SizeX) or (V.SizeY<>SizeY) then
+    begin
+      VAux := TNNetVolume.Create;
+      VAux.Copy(V);
+      V.CopyResizing(VAux, SizeX, SizeY);
+      VAux.Free;
+    end;
+    if (EncodeNeuronalInput >= 0) then
+    begin
+      V.RgbImgToNeuronalInput( (EncodeNeuronalInput) and 255 );
+    end;
+    Result := true;
+  end
+  else
+  begin
+    Result := false;
+  end;
+end;
+
 procedure ConfusionWriteCSVHeader(var CSVConfusion: TextFile; Labels: array of string);
 var
   I: integer;
@@ -1654,6 +1925,164 @@ begin
 
   vOutput.Free;
   pOutput.Free;
+end;
+
+function RemoveRandomWord(const Str: string): string;
+var
+  WordList: TNNetStringList;
+  RandomWordIndex: integer;
+begin
+  Result := Str;
+  // Split the string into words based on spaces.
+  WordList := CreateTokenizedStringList(Result,' ');
+  // Check if there are any words to remove.
+  if WordList.Count > 1 then
+  begin
+    // Select a random word to remove.
+    RandomWordIndex := Random(WordList.Count);
+    WordList.Delete(RandomWordIndex);
+    // Reconstruct the string from the remaining words.
+    Result := WordList.DelimitedText;
+  end;
+  // Free the TStringList to prevent memory leaks.
+  WordList.Free;
+end;
+
+procedure FilterCSVWithNumbersUpToMax(inputFile,outputFile: string; MaxInteger: integer; MaxRows: integer = 0);
+var
+  LargeFileIn, LargeFileOut: TextFile;
+  StrLine: string;
+  MaxValue, RowCnt, WordCnt: integer;
+  Separator: TNNetStringList;
+begin
+  Separator := CreateTokenizedStringList(',');
+  RowCnt := 0;
+  //WriteLn('Counting rows from: ', filename);
+  AssignFile(LargeFileIn, inputFile);
+  AssignFile(LargeFileOut, outputFile);
+  Reset(LargeFileIn);
+  Rewrite(LargeFileOut);
+  while (not Eof(LargeFileIn)) and ( (MaxRows=0) or (RowCnt<MaxRows) ) do
+  begin
+    ReadLn(LargeFileIn, StrLine);
+    Separator.DelimitedText := StrLine;
+    if Separator.Count > 0 then
+    begin
+      MaxValue := 0;
+      for WordCnt := 0 to Separator.Count - 1 do
+      begin
+        MaxValue := Max(MaxValue, StrToInt(Separator[WordCnt]));
+        if MaxValue > MaxInteger then break;
+      end;
+      if MaxValue <= MaxInteger then
+      begin
+        RowCnt := RowCnt + 1;
+        WriteLn(LargeFileOut, StrLine);
+      end;
+    end;
+  end;
+  CloseFile(LargeFileIn);
+  CloseFile(LargeFileOut);
+end;
+
+procedure LoadIntegersInCSV(filename: string; var aTokens: TNNetAAInteger;
+  MaxRows: integer = 0);
+var
+  LargeFile: TextFile;
+  StrLine: string;
+  RowCnt, WordCnt: integer;
+  Separator: TNNetStringList;
+begin
+  Separator := CreateTokenizedStringList(',');
+  RowCnt := 0;
+  //WriteLn('Counting rows from: ', filename);
+  AssignFile(LargeFile, filename);
+  Reset(LargeFile);
+  while (not Eof(LargeFile)) and ( (MaxRows=0) or (RowCnt<MaxRows) ) do
+  begin
+    ReadLn(LargeFile, StrLine);
+    RowCnt := RowCnt + 1;
+  end;
+  CloseFile(LargeFile);
+  //WriteLn('Loading: ', filename);
+  SetLength(aTokens, RowCnt);
+  //WriteLn('Loading ', RowCnt,' rows.');
+  Reset(LargeFile);
+  RowCnt := 0;
+  while (not Eof(LargeFile)) and ( (MaxRows=0) or (RowCnt<MaxRows) ) do
+  begin
+    ReadLn(LargeFile, StrLine);
+    Separator.DelimitedText := StrLine;
+    SetLength(aTokens[RowCnt], Separator.Count);
+    if Separator.Count > 0 then
+    begin
+      for WordCnt := 0 to Separator.Count - 1 do
+      begin
+        aTokens[RowCnt][WordCnt] := StrToInt(Separator[WordCnt]);
+      end;
+    end;
+    RowCnt := RowCnt + 1;
+  end;
+  CloseFile(LargeFile);
+end;
+
+function RemoveRandomChars(const Str: string; Count: integer): string;
+var
+  i: integer;
+  StrLen: integer;
+begin
+  Result := Str;
+  // Calculate the length of the string before removing characters.
+  StrLen := Length(Result);
+  if (Count > 0) and (StrLen>1) then
+  begin
+    // Loop for the number of characters to be removed.
+    for i := 1 to Count do
+    begin
+      // Check if the string is not empty.
+      if StrLen > 1 then
+      begin
+        // Randomly select a character position and remove one character from that position.
+        // The '+ 1' is necessary because Pascal strings are 1-indexed, not 0-indexed.
+        Delete(Result, Random(StrLen) + 1, 1);
+        Dec(StrLen);
+      end;
+    end;
+  end;
+end;
+
+
+function RandomSubstring(const InputString: string): string;
+var
+  SpacePositions: TIntegerList;
+  I, RandomSpacePos: Integer;
+  InputStringLen: integer;
+begin
+  InputStringLen := Length(InputString);
+  if InputStringLen > 0 then
+  begin
+    // Create a new integer list instance
+    SpacePositions := TIntegerList.Create;
+    // Find the positions of all spaces in the string
+    for I := 1 to InputStringLen do
+    begin
+      if InputString[I] = ' ' then
+      begin
+        SpacePositions.Add(I);
+      end;
+    end;
+
+    // Append -1 to handle the case with no spaces
+    SpacePositions.Add(0);
+
+    // Randomly select one of the space positions
+    RandomSpacePos := SpacePositions[Random(SpacePositions.Count)];
+
+    // Return the substring starting from the position after the random space
+    Result := Copy(InputString, RandomSpacePos + 1, InputStringLen - RandomSpacePos);
+    SpacePositions.Free;
+  end
+  else Result := '';
 end;
 
 end.
